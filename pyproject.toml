@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-governance-hub"
+version = "0.1.0"
+description = "A lightweight, open-source governance middleware for LLM agents"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "httpx>=0.25.0",
+]
