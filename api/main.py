@@ -61,7 +61,7 @@ async def health():
     }
 
 
-async def generic_exception_handler(exc: Exception):
+async def generic_exception_handler(request: Request, exc: Exception):
     """
     Generic exception handler for unhandled exceptions.
 
@@ -115,13 +115,14 @@ def create_app() -> FastAPI:
         Raises:
             HTTPException: If policy engine is not initialized
         """
-        if app.state.policy_engine is None:
+        policy_engine = getattr(app.state, 'policy_engine', None)
+        if policy_engine is None:
             raise HTTPException(
                 status_code=503,
                 detail="Policy engine not initialized"
             )
 
-        result = app.state.policy_engine.evaluate(
+        result = policy_engine.evaluate(
             agent_id=request.agent_id,
             action=request.action,
             context=request.context

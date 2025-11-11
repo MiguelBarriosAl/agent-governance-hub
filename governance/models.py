@@ -6,7 +6,7 @@ Data structures for policies, rules, and decisions.
 
 from enum import Enum
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class DecisionType(str, Enum):
@@ -22,17 +22,17 @@ class Rule(BaseModel):
     Represents a single governance rule within a policy.
 
     Fields:
-        id: Optional identifier for traceability (can be set in YAML)
+        id: Unique identifier for traceability (required)
         action: The action this rule applies to (e.g., "query_database")
         decision: What to do when this rule matches
-        conditions: Optional conditions that must be met (defaults to {})
-        reason: Human-readable explanation for this rule
+        conditions: Conditions that must be met (required, can be empty dict)
+        reason: Human-readable explanation for this rule (required)
     """
-    id: Optional[str] = None
+    id: str
     action: str
     decision: DecisionType
-    conditions: Dict[str, Any] = Field(default_factory=dict)
-    reason: Optional[str] = None
+    conditions: Dict[str, Any]
+    reason: str
 
 
 class Policy(BaseModel):
@@ -41,12 +41,12 @@ class Policy(BaseModel):
 
     Fields:
         agent_id: Identifier of the agent this policy applies to
-        description: Optional human readable description of the policy
-        rules: List of rules to evaluate for this agent
-        source_file: Optional source filename where the policy was defined
+        description: Human readable description of the policy (required)
+        rules: List of rules to evaluate for this agent (required)
+        source_file: Source filename (set by loader after parsing)
     """
     agent_id: str
-    description: Optional[str] = None
+    description: str
     rules: List[Rule]
     source_file: Optional[str] = None
 

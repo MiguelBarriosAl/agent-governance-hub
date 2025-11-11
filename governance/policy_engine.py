@@ -70,19 +70,15 @@ class PolicyEngine:
         # Evaluate rules in order (first match wins)
         for rule in policy.rules:
             if self._rule_matches(rule, action, context):
-                reason_text = rule.reason or (
-                    f"Matched rule '{rule.id}' for action '{action}'"
-                )
                 return EvaluationResult(
                     decision=rule.decision,
-                    reason=reason_text,
+                    reason=rule.reason,
                     policy_matched=f"{agent_id}.{action}",
                     agent_id=agent_id,
                     action=action,
-                    rule_id=getattr(rule, "id", None),
+                    rule_id=rule.id,
                 )
         
-        # No rule matched - default to allow
         # No rule matched - return the configured default decision
         return EvaluationResult(
             decision=self.default_decision,
@@ -156,13 +152,3 @@ class PolicyEngine:
             Policy object or None if not found
         """
         return self._policy_map.get(agent_id)
-    
-    def reload_policies(self, policies: List[Policy]) -> None:
-        """
-        Reload policies without restarting the engine.
-        
-        Args:
-            policies: New list of policies to use
-        """
-        self.policies = policies
-        self._policy_map = {policy.agent_id: policy for policy in policies}

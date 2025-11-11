@@ -83,20 +83,9 @@ class PolicyLoader:
             # Validate policy version
             self._validate_policy_version(data, filename)
 
-            # Validate and parse into Pydantic models
+            # Parse and validate with Pydantic
+            # Will fail immediately if any required field is missing
             policy_set = PolicySet(**data)
-
-            # Ensure structural defaults and normalization
-            for p in policy_set.policies:
-                # guarantee rules list exists
-                p.rules = p.rules or []
-                for idx, r in enumerate(p.rules):
-                    # ensure conditions exist
-                    if r.conditions is None:
-                        r.conditions = {}
-                    # if rule id missing, create a stable fallback id
-                    if not getattr(r, "id", None):
-                        r.id = f"{p.agent_id}-{idx+1}"
 
             return policy_set
 
