@@ -1,0 +1,56 @@
+version: "1.0"
+policies:
+  - agent_id: "retriever"
+    description: "Rules for Retriever agent (data gathering)"
+    rules:
+      - id: "R001"
+        action: "query_database"
+        decision: "allow"
+        conditions: {}
+        reason: "Retriever can perform read-only database queries"
+
+      - id: "R002"
+        action: "search"
+        decision: "allow"
+        conditions: {}
+        reason: "Retriever can perform search operations"
+
+      - id: "R003"
+        action: "delete_data"
+        decision: "block"
+        conditions: {}
+        reason: "Retriever cannot delete data"
+
+      - id: "R004"
+        action: "modify_data"
+        decision: "block"
+        conditions: {}
+        reason: "Retriever cannot modify data"
+
+  - agent_id: "analyzer"
+    description: "Rules for Analyzer agent (data processing)"
+    rules:
+      - id: "R005"
+        action: "analyze"
+        decision: "verify"
+        conditions:
+          max_tokens: 4000
+        reason: "Requires human verification if exceeds 4000 tokens"
+
+      - id: "R006"
+        action: "read_data"
+        decision: "allow"
+        conditions: {}
+        reason: "Analyzer can read data for analysis"
+
+      - id: "R007"
+        action: "call_external_api"
+        decision: "flag"
+        conditions: {}
+        reason: "External API calls should be monitored"
+
+      - id: "R008"
+        action: "modify_database"
+        decision: "block"
+        conditions: {}
+        reason: "Analyzer cannot directly modify the database"
