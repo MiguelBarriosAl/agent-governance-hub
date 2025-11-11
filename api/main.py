@@ -7,14 +7,14 @@ import logging
 import uvicorn
 
 from typing import Dict, Any
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from config.settings import settings
 from governance.policy_loader import PolicyLoader, PolicyLoadError
 from governance.policy_engine import PolicyEngine
 from governance.models import EvaluationResult
+from api.exceptions import generic_exception_handler
 
 logger = logging.getLogger(__name__)
 
@@ -59,27 +59,6 @@ async def health():
         "service": "agent-governance-hub",
         "version": "0.1.0"
     }
-
-
-async def generic_exception_handler(request: Request, exc: Exception):
-    """
-    Generic exception handler for unhandled exceptions.
-
-    Args:
-        request: The incoming request
-        exc: The exception that was raised
-
-    Returns:
-        JSONResponse with error details
-    """
-    logger.error("Unhandled exception: %s", exc, exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal server error",
-            "type": type(exc).__name__
-        }
-    )
 
 
 def create_app() -> FastAPI:

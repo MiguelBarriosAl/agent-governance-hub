@@ -131,14 +131,3 @@ class PolicyLoader:
 
         return all_policies
     
-    def load_default_policy(self) -> PolicySet:
-        """
-        Load the default policy file.
-        
-        Returns:
-            Default PolicySet
-            
-        Raises:
-            PolicyLoadError: If default.yaml cannot be loaded
-        """
-        return self.load_policy_file("default.yaml")

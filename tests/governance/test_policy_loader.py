@@ -49,26 +49,6 @@ class TestPolicyFileLoading:
         with pytest.raises(PolicyLoadError, match="Policy file not found"):
             loader.load_policy_file("nonexistent.yaml")
     
-    def test_load_default_policy(self, policy_dir: Path):
-        """Test loading default policy file by name."""
-        default_file = policy_dir / "default.yaml"
-        default_file.write_text("""
-version: "1.0"
-policies:
-  - agent_id: "default_agent"
-    description: "Default policy"
-    rules:
-      - id: "D001"
-        action: "default_action"
-        decision: "allow"
-        conditions: {}
-        reason: "Default reason"
-""")
-        
-        loader = PolicyLoader(policy_dir)
-        policy_set = loader.load_default_policy()
-        
-        assert policy_set.policies[0].agent_id == "default_agent"
 
 
 class TestVersionValidation:

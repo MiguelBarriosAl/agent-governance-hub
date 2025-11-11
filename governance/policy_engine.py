@@ -140,15 +140,3 @@ class PolicyEngine:
         if isinstance(expected, list):
             return actual in expected
         return actual == expected
-    
-    def get_policy(self, agent_id: str) -> Optional[Policy]:
-        """
-        Get the policy for a specific agent.
-        
-        Args:
-            agent_id: Identifier of the agent
-            
-        Returns:
-            Policy object or None if not found
-        """
-        return self._policy_map.get(agent_id)
