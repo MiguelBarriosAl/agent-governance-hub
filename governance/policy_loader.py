@@ -3,11 +3,14 @@ Policy Loader
 
 Responsible for loading and parsing YAML policy files.
 """
-
+import yaml
 from pathlib import Path
 from typing import List
-import yaml
-from .models import PolicySet, Policy
+from governance.models import PolicySet, Policy
+
+
+# Supported policy schema version
+SUPPORTED_POLICY_VERSION = "1.0"
 
 
 class PolicyLoadError(Exception):
@@ -34,6 +37,27 @@ class PolicyLoader:
         if not self.policy_dir.exists():
             raise PolicyLoadError(f"Policy directory not found: {policy_dir}")
     
+    def _validate_policy_version(self, data: dict, filename: str) -> None:
+        """
+        Validate policy file version.
+        
+        Args:
+            data: Parsed YAML data
+            filename: Name of the policy file
+            
+        Raises:
+            PolicyLoadError: If version is missing or incompatible
+        """
+        if "version" not in data:
+            raise PolicyLoadError(f"Missing 'version' field in {filename}")
+        
+        version = str(data["version"])
+        if version != SUPPORTED_POLICY_VERSION:
+            raise PolicyLoadError(
+                f"Incompatible policy version in {filename}: "
+                f"expected {SUPPORTED_POLICY_VERSION!r}, got {version!r}"
+            )
+    
     def load_policy_file(self, filename: str) -> PolicySet:
         """
         Load a single policy file and parse it into a PolicySet.
@@ -56,16 +80,8 @@ class PolicyLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f) or {}
 
-            # Basic version validation
-            if "version" not in data:
-                raise PolicyLoadError(f"Missing 'version' in {filename}")
-            if str(data.get("version")) != "1.0":
-                ver = data.get("version")
-                msg = (
-                    f"Incompatible or unsupported policy version in {filename}: "
-                    f"{ver!r}"
-                )
-                raise PolicyLoadError(msg)
+            # Validate policy version
+            self._validate_policy_version(data, filename)
 
             # Validate and parse into Pydantic models
             policy_set = PolicySet(**data)
