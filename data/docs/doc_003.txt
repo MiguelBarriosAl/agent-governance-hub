@@ -1,0 +1,1 @@
+Natural language processing enables computers to understand and generate human language. Modern NLP techniques use transformer architectures like BERT and GPT to achieve state-of-the-art results in tasks such as translation, summarization, and question answering.

@@ -1,0 +1,1 @@
+Machine learning models require large amounts of training data to achieve high accuracy. The quality of the data is often more important than the quantity. Data preprocessing, feature engineering, and careful validation are essential steps in building robust ML systems.
