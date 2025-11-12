@@ -1,0 +1,1 @@
+Vector databases store data as high-dimensional vectors, enabling efficient similarity search. They are essential for applications like semantic search, recommendation systems, and retrieval-augmented generation (RAG) architectures.
