@@ -27,6 +27,31 @@ policies:
         conditions: {}
         reason: "Retriever cannot modify data"
 
+      - id: "R005"
+        action: "respond_directly"
+        decision: "allow"
+        conditions: {}
+        reason: "Can generate direct responses without retrieval"
+
+      - id: "R006"
+        action: "generate_answer"
+        decision: "verify"
+        conditions:
+          max_context_tokens: 2000
+        reason: "Large context requires human verification"
+
+      - id: "R007"
+        action: "ask_question"
+        decision: "allow"
+        conditions: {}
+        reason: "Users can ask questions to the agent"
+
+      - id: "R008"
+        action: "vector_retrieval"
+        decision: "allow"
+        conditions: {}
+        reason: "Agent can retrieve documents from vector database"
+
   - agent_id: "analyzer"
     description: "Rules for Analyzer agent (data processing)"
     rules:
