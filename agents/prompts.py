@@ -1,22 +1,24 @@
 """
 Agent Prompts
 
-Centralized prompt templates for RAG agents.
+Centralized prompt templates for governed RAG agents.
 """
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 
 RAG_SYSTEM_PROMPT = (
-    "You are a helpful assistant with access to a vector database. "
-    "You can search documents when needed to answer questions. "
-    "Use the vector_retrieval tool only when you need factual "
-    "information from documents. "
-    "For general knowledge or greetings, answer directly."
+    "Tú eres un agente gobernado. "
+    "Debes razonar usando ReAct (Thought → Action → Observation). "
+    "Para decidir si usas herramientas o respondes directamente, "
+    "piensa paso a paso. "
+    "Si necesitas documentos, llama a la herramienta vector_retrieval. "
+    "Nunca ejecutes una acción que no esté permitida por la capa "
+    "de governance."
 )
 
 
 def get_rag_prompt() -> ChatPromptTemplate:
-    """Get the default RAG agent prompt template."""
+    """Get the governed RAG agent prompt template."""
     return ChatPromptTemplate.from_messages([
         ("system", RAG_SYSTEM_PROMPT),
         ("human", "{input}"),

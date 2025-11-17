@@ -18,6 +18,8 @@ class VectorRetrievalInput(BaseModel):
 
 
 class VectorRetrievalTool(BaseTool):
+    """Tool for retrieving documents from vector database."""
+    
     name: str = "vector_retrieval"
     description: str = (
         "Search the vector database for relevant documents. "
@@ -26,10 +28,14 @@ class VectorRetrievalTool(BaseTool):
     args_schema: Type[BaseModel] = VectorRetrievalInput
     vectorstore: Any = Field(description="Qdrant vectorstore instance")
     
+    # Policy metadata - governance callback uses this
+    policy_action: str = "query_database"
+    
     class Config:
         arbitrary_types_allowed = True
 
     def _run(self, query: str) -> str:
+        """Execute vector similarity search."""
         try:
             results = self.vectorstore.similarity_search(query=query, k=3)
 
@@ -45,8 +51,13 @@ class VectorRetrievalTool(BaseTool):
             return "\n\n".join(output)
 
         except Exception as e:
-            logger.error("Vector retrieval failed", extra={"error": str(e), "query": query})
+            logger.error(
+                "Vector retrieval failed",
+                extra={"error": str(e), "query": query}
+            )
             return f"Error during retrieval: {str(e)}"
 
     async def _arun(self, query: str) -> str:
+        """Async execution not supported."""
         raise NotImplementedError("Async not supported")
+

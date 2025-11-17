@@ -47,10 +47,10 @@ policies:
         reason: "Users can ask questions to the agent"
 
       - id: "R008"
-        action: "vector_retrieval"
+        action: "query_database"
         decision: "allow"
         conditions: {}
-        reason: "Agent can retrieve documents from vector database"
+        reason: "Agent can query the vector database for information"
 
   - agent_id: "analyzer"
     description: "Rules for Analyzer agent (data processing)"

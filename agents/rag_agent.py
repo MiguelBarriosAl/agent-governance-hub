@@ -1,50 +1,30 @@
 """
 Governed RAG Agent
 
-ReAct-based agent that uses OpenAI for reasoning and tool calling,
-with policy enforcement before executing any action.
+ReAct-based agent with policy enforcement and observability.
+All decisions go through the policy engine - no heuristics.
 """
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+import logging
+import time
 
 from langchain_openai import ChatOpenAI
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_community.vectorstores import Qdrant
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain.callbacks.base import BaseCallbackHandler
 
 from agents.base_agent import BaseAgent
 from agents.prompts import get_rag_prompt
+from agents.callbacks import (
+    PolicyEnforcementCallback,
+    ObservabilityCallback
+)
 from governance.policy_engine import PolicyEngine
 from governance.models import DecisionType
 from tools.vector_retrieval import VectorRetrievalTool
 
-
-class GovernanceCallback(BaseCallbackHandler):
-    """Callback that enforces policies on tool executions."""
-    
-    def __init__(self, agent_ref):
-        super().__init__()
-        self.agent = agent_ref
-    
-    def on_tool_start(self, serialized: Dict[str, Any],
-                     input_str: str, **kwargs):
-        """Check policy before tool execution."""
-        tool_name = serialized.get("name", "")
-        
-        if tool_name == "vector_retrieval":
-            evaluation = self.agent.evaluate_action(
-                action="vector_retrieval",
-                context={"query": input_str}
-            )
-            
-            if evaluation.decision == DecisionType.BLOCK:
-                raise Exception(
-                    f"Action blocked by policy: {evaluation.reason} "
-                    f"(rule: {evaluation.rule_id})"
-                )
-
-
+logger = logging.getLogger(__name__)
 
 class GovernedRAGAgent(BaseAgent):
     """
@@ -109,9 +89,18 @@ class GovernedRAGAgent(BaseAgent):
         Returns:
             Status dict
         """
+        logger.info(
+            "Loading documents into vector store",
+            extra={"agent": self.name, "directory": str(docs_dir)}
+        )
+        
         docs_path = Path(docs_dir)
         
         if not docs_path.exists():
+            logger.error(
+                "Document directory not found",
+                extra={"agent": self.name, "directory": str(docs_dir)}
+            )
             return {
                 "status": "error",
                 "message": f"Directory not found: {docs_dir}"
@@ -131,10 +120,23 @@ class GovernedRAGAgent(BaseAgent):
                 })
         
         if not texts:
+            logger.warning(
+                "No documents found in directory",
+                extra={"agent": self.name, "directory": str(docs_dir)}
+            )
             return {
                 "status": "error",
                 "message": "No documents found"
             }
+        
+        logger.info(
+            "Creating vector store with embeddings",
+            extra={
+                "agent": self.name,
+                "documents": len(texts),
+                "embedding_model": "all-MiniLM-L6-v2"
+            }
+        )
         
         # Create vector store
         self.vectorstore = Qdrant.from_texts(
@@ -147,6 +149,11 @@ class GovernedRAGAgent(BaseAgent):
         
         # Setup tools now that vectorstore exists
         self._setup_tools()
+        
+        logger.info(
+            "Documents loaded successfully",
+            extra={"agent": self.name, "documents": len(texts)}
+        )
         
         return {
             "status": "success",
@@ -182,9 +189,9 @@ class GovernedRAGAgent(BaseAgent):
         """
         Process user query with LLM reasoning and policy enforcement.
         
-        This is the main interface for the agent. The LLM decides
-        whether to use tools or answer directly. All actions are
-        governed by policies.
+        The LLM decides whether to use tools or answer directly.
+        All actions are evaluated through the policy engine.
+        No heuristics - pure policy-based governance.
         
         Args:
             query: Natural language query from user
@@ -192,29 +199,68 @@ class GovernedRAGAgent(BaseAgent):
         Returns:
             Dict with answer and metadata
         """
+        logger.info(
+            "Processing user query",
+            extra={"agent": self.name, "query": query[:100]}
+        )
+        
         if not self.agent_executor:
+            logger.error(
+                "Agent not initialized",
+                extra={"agent": self.name}
+            )
             return {
                 "status": "error",
                 "message": "Agent not initialized. Load documents first."
             }
         
-        # Check if query itself is allowed
+        # Evaluate query through policy engine
+        # (No heuristics - policy decides everything)
         evaluation = self.evaluate_action(
             action="ask_question",
             context={"query": query}
         )
         
+        logger.info(
+            "Policy evaluation for query",
+            extra={
+                "agent": self.name,
+                "action": "ask_question",
+                "decision": evaluation.decision.value,
+                "rule_id": evaluation.rule_id
+            }
+        )
+        
         if evaluation.decision == DecisionType.BLOCK:
+            logger.warning(
+                "Query blocked by policy",
+                extra={
+                    "agent": self.name,
+                    "rule_id": evaluation.rule_id,
+                    "reason": evaluation.reason
+                }
+            )
             return {
                 "status": "blocked",
                 "reason": evaluation.reason,
                 "rule_id": evaluation.rule_id
             }
         
-        # Execute agent (LLM decides strategy internally)
+        # Execute agent with governance
+        start_time = time.time()
         try:
-            # Intercept tool calls for policy enforcement
             result = self._execute_with_governance(query)
+            
+            elapsed = time.time() - start_time
+            
+            logger.info(
+                "Query processed successfully",
+                extra={
+                    "agent": self.name,
+                    "elapsed_ms": round(elapsed * 1000, 2),
+                    "answer_length": len(result)
+                }
+            )
             
             return {
                 "status": "success",
@@ -224,6 +270,15 @@ class GovernedRAGAgent(BaseAgent):
             }
         
         except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(
+                "Query processing failed",
+                extra={
+                    "agent": self.name,
+                    "elapsed_ms": round(elapsed * 1000, 2),
+                    "error": str(e)
+                }
+            )
             return {
                 "status": "error",
                 "message": f"Agent execution failed: {str(e)}"
@@ -231,7 +286,11 @@ class GovernedRAGAgent(BaseAgent):
     
     def _execute_with_governance(self, query: str) -> str:
         """
-        Execute agent with policy checks on tool calls via callback.
+        Execute agent with separated policy enforcement and observability.
+        
+        Uses two independent callbacks:
+        - PolicyEnforcementCallback: validates tool calls against policies
+        - ObservabilityCallback: logs all agent behavior
         
         Args:
             query: User query
@@ -239,13 +298,15 @@ class GovernedRAGAgent(BaseAgent):
         Returns:
             Agent's final answer
         """
-        # Create callback that intercepts tool calls
-        governance_callback = GovernanceCallback(self)
+        # Create separated callbacks
+        policy_callback = PolicyEnforcementCallback(self, self.tools)
+        observability_callback = ObservabilityCallback(self)
         
-        # Execute with callback
+        # Execute with both callbacks
         result = self.agent_executor.invoke(
             {"input": query},
-            config={"callbacks": [governance_callback]}
+            config={"callbacks": [policy_callback, observability_callback]}
         )
         
         return result.get("output", "No response generated")
+
