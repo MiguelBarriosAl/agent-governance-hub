@@ -42,3 +42,8 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# env var
+.env
+.env.local
+.env.*.local

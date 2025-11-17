@@ -1,42 +1,114 @@
 # Agent Governance Hub
 
-A lightweight, policy-driven governance middleware for LLM agents. Control agent behavior through declarative YAML policies, ensuring safe and compliant AI operations.
+A lightweight, policy-driven governance framework for LLM agents with ReAct reasoning. Control agent behavior through declarative YAML policies and structured observability—ensuring safe, compliant, and traceable AI operations.
 
 ## Overview
 
-Agent Governance Hub provides a **policy engine** that evaluates every agent action before execution. Define rules in YAML, and the system automatically enforces them—allowing, blocking, or flagging actions based on configurable conditions.
+Agent Governance Hub provides a **policy-first architecture** for governing LLM agents. Every action is evaluated against declarative policies before execution, with complete separation between policy enforcement and observability logging.
 
 ### Key Features
 
-- **Declarative Policies**: Define governance rules in simple YAML files
-- **Policy Enforcement**: Automatic evaluation before every agent action
-- **Vector-Based Retrieval**: Built-in document search with Qdrant + HuggingFace embeddings
-- **FastAPI Integration**: RESTful API for policy evaluation and agent management
-- **Type Safety**: Pydantic validation for policies and configurations
-- **Extensible Architecture**: Base agent class for creating governed agents
+- **🔒 Policy Enforcement**: Automatic evaluation before every agent action
+- **📊 Separated Observability**: Independent callbacks for governance and logging
+- **🤖 ReAct Agent**: OpenAI-powered reasoning with LangChain tool calling (gpt-3.5-turbo)
+- **🔍 Vector Retrieval**: Built-in semantic search with Qdrant (in-memory) + HuggingFace embeddings
+- **📝 Structured Logging**: Complete traceability of LLM decisions, tool usage, and policy evaluations
+- **⚡ FastAPI Integration**: RESTful API for policy evaluation and agent orchestration
+- **🛡️ Type Safety**: Pydantic validation throughout the stack
 
 ## Architecture
 
+### High-Level Flow
+
 ```
-┌─────────────────┐
-│  YAML Policies  │  ← Define rules (allow/block/verify/flag)
-└────────┬────────┘
+┌──────────────────┐
+│  User Query      │
+└────────┬─────────┘
          │
          ▼
-┌─────────────────┐
-│ Policy Engine   │  ← Evaluates actions against rules
-└────────┬────────┘
+┌──────────────────────────────────────────────────────┐
+│  GovernedRAGAgent                                    │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ 1. Policy Check (ask_question action)       │   │
+│  │    ↓ PolicyEngine.evaluate()                │   │
+│  │    ↓ Decision: ALLOW/BLOCK                  │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ 2. LLM Reasoning (ReAct pattern)            │   │
+│  │    ↓ OpenAI GPT-3.5-turbo                   │   │
+│  │    ↓ Decides: Direct Answer vs Tool Call    │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ 3. Tool Execution (if needed)               │   │
+│  │    ↓ PolicyEnforcementCallback intercepts   │   │
+│  │    ↓ Gets tool.policy_action metadata       │   │
+│  │    ↓ PolicyEngine.evaluate(query_database)  │   │
+│  │    ↓ VectorRetrievalTool executes           │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ 4. Observability (throughout)               │   │
+│  │    ↓ ObservabilityCallback logs all events  │   │
+│  │    ↓ Timing, decisions, tool calls          │   │
+│  └──────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────┘
          │
          ▼
-┌─────────────────┐
-│   Base Agent    │  ← Enforces decisions automatically
-└────────┬────────┘
-         │
-         ├─────────► RetrieverAgent
-         └─────────► AnalyzerAgent
+┌──────────────────┐
+│  Final Answer    │
+└──────────────────┘
+```
+
+### Core Components
+
+```
+┌─────────────────────────────────────────────────────┐
+│  YAML Policies (config/policies/default.yaml)      │
+│  • Declarative rules: allow/block/verify/flag      │
+└─────────────────┬───────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  PolicyEngine (governance/policy_engine.py)        │
+│  • Evaluates agent_id + action + context          │
+│  • First-match rule strategy                       │
+│  • Returns EvaluationResult with decision          │
+└─────────────────┬───────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  PolicyEnforcementCallback (agents/callbacks.py)   │
+│  • Intercepts tool calls before execution          │
+│  • Reads tool.policy_action metadata               │
+│  • Blocks execution if policy denies               │
+└─────────────────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  VectorRetrievalTool (tools/vector_retrieval.py)   │
+│  • Metadata: policy_action = "query_database"      │
+│  • Executes Qdrant similarity search               │
+│  • Returns top-k relevant documents                │
+└─────────────────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────┐
+│  ObservabilityCallback (agents/callbacks.py)       │
+│  • Logs LLM reasoning steps                        │
+│  • Tracks tool execution timing                    │
+│  • Records policy evaluation results               │
+└─────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- Poetry (dependency management)
+- OpenAI API key
 
 ### Installation
 
@@ -48,59 +120,157 @@ cd agent-governance-hub
 # Install dependencies
 poetry install
 
+# Configure OpenAI API key
+echo "OPENAI_API_KEY=your-api-key-here" > .env
+
+# Run the demo
+poetry run python demo_rag_simple.py
+
 # Run tests
 poetry run pytest -v
 ```
 
-### Basic Usage
+### Demo Output
 
-#### 1. Define Policies
+The demo showcases the governed RAG agent:
 
-Create rules in `config/policies/default.yaml`:
+```bash
+✅ Answer:
+Machine learning models require large amounts of training data...
+
+Decision: allow (rule: R007)
+```
+
+**Logs show:**
+- ✅ LLM reasoning and decision making
+- ✅ Tool usage patterns (when retrieval was needed)
+- ✅ Policy evaluations (governance checks)
+- ✅ Execution timing and performance
+- ✅ Complete agent behavior traceability
+
+## Usage Examples
+
+### 1. Define Policies (YAML)
 
 ```yaml
 version: "1.0"
 policies:
   - agent_id: "retriever"
-    description: "Rules for data retrieval agent"
+    description: "Rules for RAG agent with vector retrieval"
     rules:
-      - id: "R001"
+      - id: "R007"
+        action: "ask_question"
+        decision: "allow"
+        conditions: {}
+        reason: "Users can ask questions to the agent"
+
+      - id: "R008"
         action: "query_database"
         decision: "allow"
         conditions: {}
-        reason: "Read-only queries are permitted"
+        reason: "Agent can query the vector database for information"
 
-      - id: "R002"
+      - id: "R003"
         action: "delete_data"
         decision: "block"
         conditions: {}
         reason: "Destructive operations are forbidden"
 ```
 
+### 2. Create a Tool with Policy Metadata
+
+```python
+from langchain.tools import BaseTool
+from langchain.pydantic_v1 import BaseModel, Field
+
+class VectorRetrievalTool(BaseTool):
+    name: str = "vector_retrieval"
+    description: str = "Search the vector database for documents"
+    
+    # Policy metadata - governance callback uses this
+    policy_action: str = "query_database"
+    
+    def _run(self, query: str) -> str:
+        # Execute search
+        results = self.vectorstore.similarity_search(query, k=3)
+        return format_results(results)
+```
+
+### 3. Use the Governed Agent
+
+```python
+from agents.rag_agent import GovernedRAGAgent
+from governance.policy_loader import PolicyLoader
+from governance.policy_engine import PolicyEngine
+from governance.models import DecisionType
+
+# Load policies
+loader = PolicyLoader(Path("config/policies"))
+policies = loader.load_all_policies()
+engine = PolicyEngine(policies=policies, default_decision=DecisionType.BLOCK)
+
+# Create governed agent
+agent = GovernedRAGAgent(
+    name="retriever",
+    policy_engine=engine,
+    llm_model="gpt-3.5-turbo",
+    temperature=0.0
+)
+
+# Load documents
+agent.load_documents(Path("data/docs"))
+
+# Ask questions - LLM decides when to use tools
+result = agent.ask("What is machine learning?")
+
+# Result includes answer + policy decision
+print(result["answer"])
+print(f"Decision: {result['decision']} (rule: {result['rule_id']})")
+```
+
+### 4. Structured Logging Output
+
+```log
+15:29:07 | INFO | agents.rag_agent | Processing user query | agent=retriever
+15:29:07 | INFO | agents.rag_agent | Policy evaluation for query | decision=allow | rule_id=R007
+15:29:07 | INFO | agents.callbacks | LLM reasoning started | model=gpt-3.5-turbo
+15:29:08 | INFO | agents.callbacks | Agent action decided | tool=vector_retrieval
+15:29:08 | INFO | agents.callbacks | Tool execution requested by LLM | tool=vector_retrieval
+15:29:08 | INFO | agents.callbacks | Tool execution completed | elapsed_ms=12.32
+15:29:09 | INFO | agents.rag_agent | Query processed successfully | elapsed_ms=2100.16
+```
+
 ## Project Structure
 
 ```
 agent-governance-hub/
-├── agents/              # Governed agent implementations
-│   ├── base_agent.py    # Abstract base with policy enforcement
-│   └── retriever_agent.py  # Vector search agent
-├── api/                 # FastAPI application
-│   ├── main.py          # App factory and endpoints
-│   └── exceptions.py    # Exception handlers
-├── config/              # Configuration
-│   ├── settings.py      # Application settings
-│   └── policies/        # YAML policy files
-│       └── default.yaml
-├── governance/          # Policy engine core
-│   ├── models.py        # Pydantic models
-│   ├── policy_loader.py # YAML loading & validation
-│   └── policy_engine.py # Rule evaluation logic
-├── tests/               # Test suite
-│   ├── agents/          # Agent tests (11 tests)
-│   └── governance/      # Policy tests (11 tests)
-├── data/docs/           # Sample documents
-├── demo_retriever.py    # Interactive demo
-└── pyproject.toml       # Dependencies
+├── agents/                    # Governed agent implementations
+│   ├── base_agent.py          # Abstract base with policy evaluation
+│   ├── rag_agent.py           # ReAct RAG agent with OpenAI
+│   ├── callbacks.py           # Separated callbacks
+│   │   ├── PolicyEnforcementCallback
+│   │   └── ObservabilityCallback
+│   └── prompts.py             # LLM prompt templates
+├── tools/                     # LangChain tools with policy metadata
+│   └── vector_retrieval.py    # Vector search tool
+├── governance/                # Policy engine core
+│   ├── models.py              # Pydantic models (Policy, Rule, DecisionType)
+│   ├── policy_loader.py       # YAML loading & validation
+│   └── policy_engine.py       # Rule evaluation logic
+├── config/                    # Configuration
+│   ├── settings.py            # Application settings
+│   └── policies/              # YAML policy files
+│       └── default.yaml       # Default governance rules
+├── api/                       # FastAPI application
+│   ├── main.py                # App factory and endpoints
+│   └── exceptions.py          # Exception handlers
+├── data/docs/                 # Sample documents for vector search
+├── tests/                     # Test suite (22 passing tests)
+│   ├── agents/                # Agent tests (11 tests)
+│   └── governance/            # Policy tests (11 tests)
+├── demo_rag_simple.py         # Interactive RAG agent demo
+├── pyproject.toml             # Dependencies (Poetry)
+└── .env                       # API keys (gitignored)
 ```
 
 ## Policy System
@@ -144,23 +314,71 @@ Run the FastAPI server:
 poetry run uvicorn api.main:app --reload
 ```
 
+Access documentation at: `http://localhost:8000/docs`
+
+## Testing
+
+```bash
+# Run all tests
+poetry run pytest -v
+
+# Run with coverage
+poetry run pytest --cov=agents --cov=governance --cov=api
+
+# Run specific test file
+poetry run pytest tests/agents/test_retriever_agent.py -v
+```
+
+**Test Results:**
+- ✅ 22 tests passing
+- ✅ Agents: 11 tests (policy enforcement, vectorstore integration)
+- ✅ Governance: 11 tests (policy loading, evaluation logic)
+
+## Technology Stack
+
+- **LLM Framework**: LangChain 0.1.0+ with OpenAI integration
+- **LLM Model**: GPT-3.5-turbo (temperature=0.0 for deterministic reasoning)
+- **Agent Pattern**: ReAct (Reasoning + Acting)
+- **Vector Store**: Qdrant (in-memory mode)
+- **Embeddings**: HuggingFace sentence-transformers (all-MiniLM-L6-v2)
+- **API Framework**: FastAPI 0.109+
+- **Validation**: Pydantic v2
+- **Configuration**: YAML policies with runtime loading
+- **Logging**: Structured logging with extra fields
+
+## Roadmap
+
+- [ ] Add more sophisticated policy conditions (regex patterns, context-aware rules)
+- [ ] Implement VERIFY decision workflow (human-in-the-loop)
+- [ ] Add policy versioning and A/B testing
+- [ ] Multi-agent orchestration with shared governance
+- [ ] Policy analytics dashboard (Streamlit/Gradio)
+
 ## Contributing
 
 Contributions are welcome! Please follow these guidelines:
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/new-agent`)
-3. Write tests for new functionality
+2. Create a feature branch (`git checkout -b feat/new-feature`)
+3. Write tests for new functionality (maintain >90% coverage)
 4. Ensure all tests pass (`poetry run pytest -v`)
-5. Submit a pull request
+5. Update documentation as needed
+6. Submit a pull request with clear description
 
-## License
+### Development Setup
 
-MIT License - see LICENSE file for details
+```bash
+# Install dev dependencies
+poetry install --with dev
 
-## Contact
+# Run linter
+poetry run ruff check .
 
-**Author**: Miguel Barrios  
-**Repository**: [github.com/MiguelBarriosAl/agent-governance-hub](https://github.com/MiguelBarriosAl/agent-governance-hub)
+# Format code
+poetry run black .
 
----
+# Type checking
+poetry run mypy agents/ governance/
+```
+
+
