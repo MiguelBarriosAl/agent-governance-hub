@@ -4,7 +4,7 @@ Execution Coordinator
 Coordinates agent execution with governance callbacks.
 Separates execution logic from agent orchestration.
 """
-from typing import List
+from typing import List, Dict, Any
 import logging
 
 from langchain.agents import AgentExecutor
@@ -25,6 +25,7 @@ class ExecutionCoordinator:
     - Create policy enforcement callback
     - Create observability callback
     - Execute agent with both callbacks
+    - Track tool usage for observability
     """
     
     def __init__(self, agent, tools: List):
@@ -38,7 +39,9 @@ class ExecutionCoordinator:
         self.agent = agent
         self.tools = tools
     
-    def execute(self, executor: AgentExecutor, query: str) -> str:
+    def execute(
+        self, executor: AgentExecutor, query: str
+    ) -> Dict[str, Any]:
         """
         Execute agent with policy enforcement and observability.
         
@@ -47,7 +50,7 @@ class ExecutionCoordinator:
             query: User query to process
             
         Returns:
-            Agent's final answer
+            Dict with answer and execution metadata (tools used)
         """
         logger.debug("Executing agent with governance callbacks")
         
@@ -61,4 +64,26 @@ class ExecutionCoordinator:
             config={"callbacks": [policy_callback, observability_callback]}
         )
         
-        return result.get("output", "No response generated")
+        answer = result.get("output", "No response generated")
+        
+        # Check intermediate steps to see if tools were used
+        intermediate_steps = result.get("intermediate_steps", [])
+        logger.debug("Intermediate steps count: %d", len(intermediate_steps))
+        
+        tools_used = []
+        for step in intermediate_steps:
+            if step and len(step) > 0:
+                action = step[0]
+                logger.debug("Step action type: %s", type(action))
+                if hasattr(action, 'tool'):
+                    tools_used.append(action.tool)
+                    logger.debug("Tool used: %s", action.tool)
+        
+        used_rag = "vector_retrieval" in tools_used
+        logger.debug("Tools used: %s, used_rag: %s", tools_used, used_rag)
+        
+        return {
+            "answer": answer,
+            "tools_used": tools_used,
+            "used_rag": used_rag
+        }

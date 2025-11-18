@@ -45,9 +45,15 @@ def main():
     )
     
     # Step 4: Process queries
+    # The LLM autonomously decides whether to use RAG (vector retrieval)
+    # - Queries needing factual info → Uses vector_retrieval tool
+    # - Greetings/simple questions → Answers directly without retrieval
     queries = [
+        # Expected: RAG (needs factual data)
         "What information do you have about machine learning?",
+        # Expected: Direct (simple greeting)
         "Hello! How are you?",
+        # Expected: RAG (needs factual data)
         "Find details about vector databases",
     ]
     
@@ -58,7 +64,10 @@ def main():
         result = agent.ask(query)
         
         if result["status"] == "success":
-            print(f"Answer: {result['answer'][:200]}...")
+            # Show if LLM decided to use RAG or answer directly
+            mode = "🔍 RAG" if result.get("used_rag") else "💬 Direct"
+            
+            print(f"{mode} | Answer: {result['answer'][:200]}...")
             print(f"Decision: {result['decision']} ({result['rule_id']})")
         else:
             print(f"Status: {result['status']}")

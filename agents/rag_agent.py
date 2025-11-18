@@ -142,7 +142,7 @@ class GovernedRAGAgent(BaseAgent):
         start_time = time.time()
         try:
             executor = self.tool_manager.get_executor()
-            result = self.execution_coordinator.execute(executor, query)
+            exec_result = self.execution_coordinator.execute(executor, query)
             
             elapsed = time.time() - start_time
             
@@ -151,15 +151,18 @@ class GovernedRAGAgent(BaseAgent):
                 extra={
                     "agent": self.name,
                     "elapsed_ms": round(elapsed * 1000, 2),
-                    "answer_length": len(result)
+                    "answer_length": len(exec_result["answer"]),
+                    "used_rag": exec_result["used_rag"]
                 }
             )
             
             return {
                 "status": "success",
-                "answer": result,
+                "answer": exec_result["answer"],
                 "decision": evaluation.decision.value,
-                "rule_id": evaluation.rule_id
+                "rule_id": evaluation.rule_id,
+                "used_rag": exec_result["used_rag"],
+                "tools_used": exec_result["tools_used"]
             }
         
         except Exception as e:

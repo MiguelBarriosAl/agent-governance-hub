@@ -62,7 +62,8 @@ class ToolManager:
             agent=agent,
             tools=self.tools,
             verbose=False,
-            handle_parsing_errors=True
+            handle_parsing_errors=True,
+            return_intermediate_steps=True
         )
         
         logger.debug("Tools and agent executor configured successfully")
