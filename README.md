@@ -346,56 +346,6 @@ Add dynamic conditions to rules:
   reason: "Large analysis requires human oversight"
 ```
 
-### Policy Evaluation Flow
-
-```
-1. Agent calls method (e.g., query_documents())
-2. BaseAgent.evaluate_action() invoked
-3. PolicyEngine searches for matching rule
-4. Conditions evaluated against action context
-5. Decision returned (ALLOW/BLOCK/VERIFY/FLAG)
-6. Action executed or rejected based on decision
-```
-
-## API Endpoints
-
-Run the FastAPI server:
-
-```bash
-poetry run uvicorn api.main:app --reload
-```
-
-Access documentation at: `http://localhost:8000/docs`
-
-## Testing
-
-```bash
-# Run all tests
-poetry run pytest -v
-
-# Run with coverage
-poetry run pytest --cov=agents --cov=governance --cov=api
-
-# Run specific test file
-poetry run pytest tests/agents/test_retriever_agent.py -v
-```
-
-**Test Results:**
-- ✅ 11 tests passing
-- ✅ Governance: 11 tests (policy loading, evaluation logic)
-- ✅ Demo: End-to-end validation with RAG decision visibility
-
-## Technology Stack
-
-- **LLM Framework**: LangChain 0.1.0+ with OpenAI integration
-- **LLM Model**: GPT-3.5-turbo (temperature=0.0 for deterministic reasoning)
-- **Agent Pattern**: ReAct (Reasoning + Acting)
-- **Vector Store**: Qdrant (in-memory mode)
-- **Embeddings**: HuggingFace sentence-transformers (all-MiniLM-L6-v2)
-- **API Framework**: FastAPI 0.109+
-- **Validation**: Pydantic v2
-- **Configuration**: YAML policies with runtime loading
-- **Logging**: Structured logging with extra fields
 
 ## Roadmap
 
