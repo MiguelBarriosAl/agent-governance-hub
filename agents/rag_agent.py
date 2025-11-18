@@ -3,28 +3,25 @@ Governed RAG Agent
 
 ReAct-based agent with policy enforcement and observability.
 All decisions go through the policy engine - no heuristics.
+Refactored to use separated managers for clean responsibilities.
+
+Document loading is handled separately by DocumentPipeline.
 """
-from typing import Dict, Any, List, Optional
-from pathlib import Path
+from typing import Dict, Any
 import logging
 import time
 
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain_community.vectorstores import Qdrant
-from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from agents.base_agent import BaseAgent
-from agents.prompts import get_rag_prompt
-from agents.callbacks import (
-    PolicyEnforcementCallback,
-    ObservabilityCallback
-)
+from agents.vector_store_manager import VectorStoreManager
+from agents.tool_manager import ToolManager
+from agents.execution_coordinator import ExecutionCoordinator
 from governance.policy_engine import PolicyEngine
 from governance.models import DecisionType
-from tools.vector_retrieval import VectorRetrievalTool
 
 logger = logging.getLogger(__name__)
+
 
 class GovernedRAGAgent(BaseAgent):
     """
@@ -37,13 +34,14 @@ class GovernedRAGAgent(BaseAgent):
     - Final Answer: Returns response
     
     All tool calls are evaluated against policies before execution.
+    Orchestrates VectorStoreManager, ToolManager, and ExecutionCoordinator.
     """
     
     def __init__(
         self,
         name: str,
         policy_engine: PolicyEngine,
-        vectorstore: Optional[Qdrant] = None,
+        vector_manager: VectorStoreManager,
         llm_model: str = "gpt-3.5-turbo",
         temperature: float = 0.0
     ):
@@ -53,7 +51,8 @@ class GovernedRAGAgent(BaseAgent):
         Args:
             name: Agent identifier (must match policy agent_id)
             policy_engine: Policy engine for governance
-            vectorstore: Qdrant vectorstore (created if None)
+            vector_manager: Initialized VectorStoreManager
+                (from DocumentPipeline)
             llm_model: OpenAI model name
             temperature: LLM temperature (0=deterministic)
         """
@@ -65,126 +64,30 @@ class GovernedRAGAgent(BaseAgent):
             temperature=temperature
         )
         
-        # Vector store
-        self.vectorstore = vectorstore
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        # Vector manager (injected from pipeline)
+        self.vector_manager = vector_manager
         
-        # Tools (only vector retrieval for now)
-        self.tools = []
-        if self.vectorstore:
-            self._setup_tools()
-        
-        # Agent executor (created when tools are ready)
-        self.agent_executor = None
+        # Setup tools and execution coordinator immediately
+        self._setup_execution()
     
-    def load_documents(self, docs_dir: Path) -> Dict[str, Any]:
-        """
-        Load documents into vector store.
+    def _setup_execution(self):
+        """Setup tools and execution coordinator with vector store."""
+        logger.debug("Setting up execution components")
         
-        Args:
-            docs_dir: Directory containing .txt files
-            
-        Returns:
-            Status dict
-        """
-        logger.info(
-            "Loading documents into vector store",
-            extra={"agent": self.name, "directory": str(docs_dir)}
+        vectorstore = self.vector_manager.get_vectorstore()
+        
+        # Create and setup ToolManager
+        self.tool_manager = ToolManager(vectorstore, self.llm)
+        self.tool_manager.setup_tools()
+        
+        # Create ExecutionCoordinator
+        self.execution_coordinator = ExecutionCoordinator(
+            self,
+            self.tool_manager.get_tools()
         )
         
-        docs_path = Path(docs_dir)
-        
-        if not docs_path.exists():
-            logger.error(
-                "Document directory not found",
-                extra={"agent": self.name, "directory": str(docs_dir)}
-            )
-            return {
-                "status": "error",
-                "message": f"Directory not found: {docs_dir}"
-            }
-        
-        # Read documents
-        texts = []
-        metadatas = []
-        
-        for doc_file in sorted(docs_path.glob("*.txt")):
-            content = doc_file.read_text(encoding="utf-8").strip()
-            if content:
-                texts.append(content)
-                metadatas.append({
-                    "source": doc_file.name,
-                    "path": str(doc_file)
-                })
-        
-        if not texts:
-            logger.warning(
-                "No documents found in directory",
-                extra={"agent": self.name, "directory": str(docs_dir)}
-            )
-            return {
-                "status": "error",
-                "message": "No documents found"
-            }
-        
-        logger.info(
-            "Creating vector store with embeddings",
-            extra={
-                "agent": self.name,
-                "documents": len(texts),
-                "embedding_model": "all-MiniLM-L6-v2"
-            }
-        )
-        
-        # Create vector store
-        self.vectorstore = Qdrant.from_texts(
-            texts=texts,
-            embedding=self.embeddings,
-            metadatas=metadatas,
-            collection_name=self.name,
-            location=":memory:"
-        )
-        
-        # Setup tools now that vectorstore exists
-        self._setup_tools()
-        
-        logger.info(
-            "Documents loaded successfully",
-            extra={"agent": self.name, "documents": len(texts)}
-        )
-        
-        return {
-            "status": "success",
-            "documents_loaded": len(texts)
-        }
-    
-    def _setup_tools(self):
-        """Setup tools for the agent."""
-        if self.vectorstore is None:
-            return
-        
-        # Create vector retrieval tool
-        retrieval_tool = VectorRetrievalTool(vectorstore=self.vectorstore)
-        self.tools = [retrieval_tool]
-        
-        # Create ReAct agent with prompt
-        prompt = get_rag_prompt()
-        
-        agent = create_openai_tools_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=prompt
-        )
-        
-        self.agent_executor = AgentExecutor(
-            agent=agent,
-            tools=self.tools,
-            verbose=False,
-            handle_parsing_errors=True
-        )
-    
+        logger.debug("Execution components ready")
+
     def ask(self, query: str) -> Dict[str, Any]:
         """
         Process user query with LLM reasoning and policy enforcement.
@@ -204,18 +107,7 @@ class GovernedRAGAgent(BaseAgent):
             extra={"agent": self.name, "query": query[:100]}
         )
         
-        if not self.agent_executor:
-            logger.error(
-                "Agent not initialized",
-                extra={"agent": self.name}
-            )
-            return {
-                "status": "error",
-                "message": "Agent not initialized. Load documents first."
-            }
-        
         # Evaluate query through policy engine
-        # (No heuristics - policy decides everything)
         evaluation = self.evaluate_action(
             action="ask_question",
             context={"query": query}
@@ -249,7 +141,8 @@ class GovernedRAGAgent(BaseAgent):
         # Execute agent with governance
         start_time = time.time()
         try:
-            result = self._execute_with_governance(query)
+            executor = self.tool_manager.get_executor()
+            exec_result = self.execution_coordinator.execute(executor, query)
             
             elapsed = time.time() - start_time
             
@@ -258,15 +151,18 @@ class GovernedRAGAgent(BaseAgent):
                 extra={
                     "agent": self.name,
                     "elapsed_ms": round(elapsed * 1000, 2),
-                    "answer_length": len(result)
+                    "answer_length": len(exec_result["answer"]),
+                    "used_rag": exec_result["used_rag"]
                 }
             )
             
             return {
                 "status": "success",
-                "answer": result,
+                "answer": exec_result["answer"],
                 "decision": evaluation.decision.value,
-                "rule_id": evaluation.rule_id
+                "rule_id": evaluation.rule_id,
+                "used_rag": exec_result["used_rag"],
+                "tools_used": exec_result["tools_used"]
             }
         
         except Exception as e:
@@ -283,30 +179,5 @@ class GovernedRAGAgent(BaseAgent):
                 "status": "error",
                 "message": f"Agent execution failed: {str(e)}"
             }
-    
-    def _execute_with_governance(self, query: str) -> str:
-        """
-        Execute agent with separated policy enforcement and observability.
-        
-        Uses two independent callbacks:
-        - PolicyEnforcementCallback: validates tool calls against policies
-        - ObservabilityCallback: logs all agent behavior
-        
-        Args:
-            query: User query
-            
-        Returns:
-            Agent's final answer
-        """
-        # Create separated callbacks
-        policy_callback = PolicyEnforcementCallback(self, self.tools)
-        observability_callback = ObservabilityCallback(self)
-        
-        # Execute with both callbacks
-        result = self.agent_executor.invoke(
-            {"input": query},
-            config={"callbacks": [policy_callback, observability_callback]}
-        )
-        
-        return result.get("output", "No response generated")
+
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A lightweight, open-source governance middleware for LLM agents"
 readme = "README.md"
 authors = ["Your Name <your.email@example.com>"]
-packages = [{include = "agents"}, {include = "api"}, {include = "config"}, {include = "governance"}]
+packages = [{include = "agents"}, {include = "config"}, {include = "governance"}, {include = "pipelines"}, {include = "tools"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
