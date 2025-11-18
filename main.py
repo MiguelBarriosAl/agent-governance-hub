@@ -138,13 +138,6 @@ def main():
     print("\n" + "=" * 70)
     print("DEMO COMPLETED")
     print("=" * 70)
-    print("\nRefactored architecture demonstrated:")
-    print("  ✓ No heuristics - pure policy-based decisions")
-    print("  ✓ Separated callbacks (PolicyEnforcement + Observability)")
-    print("  ✓ Dynamic tool metadata (policy_action attribute)")
-    print("  ✓ Homogeneous policy evaluation interface")
-    print("  ✓ New governed agent prompt")
-    print("=" * 70 + "\n")
 
 
 if __name__ == "__main__":
