@@ -74,7 +74,4 @@ class ToolManager:
     def get_tools(self) -> List:
         """Get the list of configured tools."""
         return self.tools
-    
-    def is_ready(self) -> bool:
-        """Check if tools and executor are configured."""
-        return self.agent_executor is not None
+

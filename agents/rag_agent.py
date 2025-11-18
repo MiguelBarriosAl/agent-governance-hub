@@ -4,9 +4,10 @@ Governed RAG Agent
 ReAct-based agent with policy enforcement and observability.
 All decisions go through the policy engine - no heuristics.
 Refactored to use separated managers for clean responsibilities.
+
+Document loading is handled separately by DocumentPipeline.
 """
-from typing import Dict, Any, Optional
-from pathlib import Path
+from typing import Dict, Any
 import logging
 import time
 
@@ -40,6 +41,7 @@ class GovernedRAGAgent(BaseAgent):
         self,
         name: str,
         policy_engine: PolicyEngine,
+        vector_manager: VectorStoreManager,
         llm_model: str = "gpt-3.5-turbo",
         temperature: float = 0.0
     ):
@@ -49,6 +51,8 @@ class GovernedRAGAgent(BaseAgent):
         Args:
             name: Agent identifier (must match policy agent_id)
             policy_engine: Policy engine for governance
+            vector_manager: Initialized VectorStoreManager
+                (from DocumentPipeline)
             llm_model: OpenAI model name
             temperature: LLM temperature (0=deterministic)
         """
@@ -60,39 +64,14 @@ class GovernedRAGAgent(BaseAgent):
             temperature=temperature
         )
         
-        # Managers (always created explicitly for POC clarity)
-        self.vector_manager = VectorStoreManager(
-            collection_name=f"{name}_documents"
-        )
-        self.tool_manager: Optional[ToolManager] = None
-        self.execution_coordinator: Optional[ExecutionCoordinator] = None
-
-    def load_documents(self, docs_dir: Path) -> Dict[str, Any]:
-        """
-        Load documents into vector store.
+        # Vector manager (injected from pipeline)
+        self.vector_manager = vector_manager
         
-        Args:
-            docs_dir: Directory containing .txt files
-            
-        Returns:
-            Status dict
-        """
-        logger.info(
-            "Loading documents into vector store",
-            extra={"agent": self.name, "directory": str(docs_dir)}
-        )
-        
-        # Delegate to VectorStoreManager
-        result = self.vector_manager.load_text_documents(docs_dir)
-        
-        if result["status"] == "success":
-            # Setup tools and execution coordinator
-            self._setup_execution()
-        
-        return result
+        # Setup tools and execution coordinator immediately
+        self._setup_execution()
     
     def _setup_execution(self):
-        """Setup tools and execution coordinator after documents loaded."""
+        """Setup tools and execution coordinator with vector store."""
         logger.debug("Setting up execution components")
         
         vectorstore = self.vector_manager.get_vectorstore()
@@ -127,16 +106,6 @@ class GovernedRAGAgent(BaseAgent):
             "Processing user query",
             extra={"agent": self.name, "query": query[:100]}
         )
-        
-        if not self.tool_manager or not self.tool_manager.is_ready():
-            logger.error(
-                "Agent not initialized",
-                extra={"agent": self.name}
-            )
-            return {
-                "status": "error",
-                "message": "Agent not initialized. Load documents first."
-            }
         
         # Evaluate query through policy engine
         evaluation = self.evaluate_action(
